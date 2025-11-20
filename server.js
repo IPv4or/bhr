@@ -25,7 +25,10 @@ app.set('trust proxy', 1);
 // --- SECURITY MIDDLEWARE START ---
 
 // 1. Set security headers
-app.use(helmet());
+// We disable contentSecurityPolicy because we are using CDNs (Tailwind/FontAwesome)
+app.use(helmet({
+    contentSecurityPolicy: false,
+}));
 
 // 2. Rate Limiting
 const limiter = rateLimit({
