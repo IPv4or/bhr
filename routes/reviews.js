@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Review = require('../models/Review');
 
+// Simple Admin Protection (Hardcoded for simplicity - use proper Auth in v2)
+// You must send a header 'x-admin-secret': 'logan-justice' to delete
+const ADMIN_SECRET = 'logan-justice';
+
 // @desc    Get all reviews
 // @route   GET /api/reviews
 router.get('/', async (req, res) => {
@@ -42,6 +46,30 @@ router.patch('/:id/vote', async (req, res) => {
         );
         
         res.status(200).json(review);
+    } catch (err) {
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+// @desc    Delete a review (Admin only)
+// @route   DELETE /api/reviews/:id
+router.delete('/:id', async (req, res) => {
+    try {
+        const secret = req.headers['x-admin-secret'];
+        
+        if (secret !== ADMIN_SECRET) {
+            return res.status(401).json({ error: 'Unauthorized: Wrong secret phrase' });
+        }
+
+        const review = await Review.findById(req.params.id);
+
+        if (!review) {
+            return res.status(404).json({ error: 'Review not found' });
+        }
+
+        await review.deleteOne();
+
+        res.status(200).json({ success: true, data: {} });
     } catch (err) {
         res.status(500).json({ error: 'Server Error' });
     }
