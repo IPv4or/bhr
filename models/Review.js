@@ -23,7 +23,13 @@ const ReviewSchema = new mongoose.Schema({
         required: [true, 'Please add some text'],
         maxlength: [500, 'Keep it brief, brutal, and honest']
     },
+    // The Net Score (Upvotes - Downvotes)
     votes: {
+        type: Number,
+        default: 0
+    },
+    // The "Heat" (Total number of clicks) - Used for unlocking comments
+    interactionCount: {
         type: Number,
         default: 0
     },
