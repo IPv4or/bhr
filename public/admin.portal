@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BHR Admin Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-8 font-sans">
+
+    <div class="max-w-4xl mx-auto">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-red-500">
+                <i class="fa-solid fa-shield-halved mr-2"></i>Moderation Console
+            </h1>
+            <a href="/" class="text-gray-400 hover:text-white underline">Back to App</a>
+        </div>
+
+        <!-- Secret Key Input -->
+        <div id="loginSection" class="mb-8 p-6 bg-gray-800 rounded-lg border border-gray-700">
+            <label class="block text-sm font-bold mb-2 text-gray-400">Admin Secret Phrase</label>
+            <div class="flex gap-2">
+                <input type="password" id="secretInput" placeholder="Enter the secret phrase..." 
+                    class="flex-1 bg-gray-900 border border-gray-600 rounded px-4 py-2 focus:border-red-500 focus:outline-none">
+                <button onclick="loadReviews()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded transition-colors">
+                    Access
+                </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Default for this version is: <span class="font-mono text-gray-300">logan-justice</span></p>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="dashboard" class="hidden">
+            <div class="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-900 text-gray-400 text-sm uppercase">
+                            <th class="p-4 border-b border-gray-700">Place</th>
+                            <th class="p-4 border-b border-gray-700">Content</th>
+                            <th class="p-4 border-b border-gray-700 w-24">Votes</th>
+                            <th class="p-4 border-b border-gray-700 w-24">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reviewsTable" class="divide-y divide-gray-700">
+                        <!-- Reviews injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api/reviews';
+        let secret = '';
+
+        async function loadReviews() {
+            secret = document.getElementById('secretInput').value;
+            if(!secret) return alert("Enter the secret!");
+
+            try {
+                const res = await fetch(API_URL);
+                const reviews = await res.json();
+                
+                renderTable(reviews);
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+            } catch (err) {
+                alert("Failed to load reviews.");
+            }
+        }
+
+        function renderTable(reviews) {
+            const tbody = document.getElementById('reviewsTable');
+            tbody.innerHTML = '';
+
+            if (reviews.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">No reviews found.</td></tr>';
+                return;
+            }
+
+            reviews.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-700/50 transition-colors';
+                tr.innerHTML = `
+                    <td class="p-4 font-bold text-white">${r.title} <br><span class="text-xs text-gray-500 font-normal">${r.category}</span></td>
+                    <td class="p-4 text-gray-300 text-sm truncate max-w-xs">${r.body.substring(0, 60)}...</td>
+                    <td class="p-4 text-gray-400">${r.votes}</td>
+                    <td class="p-4">
+                        <button onclick="deleteReview('${r._id}')" class="bg-red-500/20 hover:bg-red-600 hover:text-white text-red-500 px-3 py-1.5 rounded text-xs font-bold transition-colors border border-red-500/30">
+                            DELETE
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function deleteReview(id) {
+            if(!confirm("Are you sure? This cannot be undone.")) return;
+
+            try {
+                const res = await fetch(`${API_URL}/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'x-admin-secret': secret
+                    }
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    loadReviews(); // Refresh table
+                } else {
+                    alert(data.error || "Failed to delete");
+                }
+            } catch (err) {
+                alert("Server Error");
+            }
+        }
+    </script>
+</body>
+</html>
