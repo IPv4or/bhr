@@ -18,6 +18,7 @@ router.get('/', async (req, res) => {
 // @route   POST /api/reviews
 router.post('/', async (req, res) => {
     try {
+        // No filter here - raw honest reviews
         const review = await Review.create(req.body);
         res.status(201).json(review);
     } catch (err) {
@@ -35,18 +36,20 @@ router.patch('/:id/vote', async (req, res) => {
     try {
         const { type } = req.body;
         const increment = type === 'up' ? 1 : -1;
+        
         const review = await Review.findByIdAndUpdate(
             req.params.id,
             { $inc: { votes: increment } },
             { new: true }
         );
+        
         res.status(200).json(review);
     } catch (err) {
         res.status(500).json({ error: 'Server Error' });
     }
 });
 
-// @desc    Delete a review (Protected)
+// @desc    Delete a review (Protected by JWT)
 // @route   DELETE /api/reviews/:id
 router.delete('/:id', protect, async (req, res) => {
     try {
@@ -57,6 +60,7 @@ router.delete('/:id', protect, async (req, res) => {
         }
 
         await review.deleteOne();
+
         res.status(200).json({ success: true, id: req.params.id });
     } catch (err) {
         res.status(500).json({ error: 'Server Error' });
