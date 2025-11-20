@@ -31,11 +31,21 @@
         }
         .neon-accent { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        
         @keyframes pulse-red {
             0%, 100% { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
             50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 30px rgba(239, 68, 68, 0.5); }
         }
         .highlight-review { animation: pulse-red 2s infinite; border: 2px solid rgb(239, 68, 68) !important; }
+        
+        /* Heat Surge Animation */
+        @keyframes heat-surge {
+            0% { transform: scale(1); color: #6b7280; }
+            50% { transform: scale(1.2); color: #ef4444; }
+            100% { transform: scale(1); color: #6b7280; }
+        }
+        .heat-pulse { animation: heat-surge 0.4s ease-out; }
+
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
@@ -169,7 +179,7 @@
 
                 renderReviews();
                 
-                // Deep Link Logic (Safe Version)
+                // Deep Link Logic
                 const urlParams = new URLSearchParams(window.location.search);
                 const linkedId = urlParams.get('id');
                 if (linkedId) {
@@ -206,21 +216,77 @@
             }
         }
 
+        // --- Seamless Voting Logic ---
         async function vote(id, type) {
+            // 1. Optimistic Update (Visual)
+            const review = reviews.find(r => r._id === id);
+            if (!review) return;
+
+            const scoreEl = document.getElementById(`score-${id}`);
+            const heatContainer = document.getElementById(`heat-container-${id}`);
+            
+            if (scoreEl) {
+                // Instant visual update
+                const currentScore = parseInt(scoreEl.innerText);
+                scoreEl.innerText = type === 'up' ? currentScore + 1 : currentScore - 1;
+            }
+            
+            if (heatContainer) {
+                // Pulse animation on heat container
+                heatContainer.classList.add('heat-pulse');
+                setTimeout(() => heatContainer.classList.remove('heat-pulse'), 400);
+            }
+
             try {
+                // 2. Server Update
                 const res = await fetch(`/api/reviews/${id}/vote`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ type })
                 });
+                
                 if (res.ok) {
                     const updatedReview = await res.json();
-                    // Update local state
+                    // Sync local state
                     const idx = reviews.findIndex(r => r._id === id);
                     if (idx !== -1) reviews[idx] = updatedReview;
-                    renderReviews(); // Re-render to update scores/unlock status
+                    
+                    // 3. Subtle UI Patch (Don't re-render entire list)
+                    updateSingleReviewUI(updatedReview);
                 }
-            } catch (err) { console.error(err); }
+            } catch (err) { 
+                console.error(err); 
+                // Revert on error would go here
+            }
+        }
+        
+        // Helper to update just one card's dynamic elements without flashing
+        function updateSingleReviewUI(r) {
+            const scoreEl = document.getElementById(`score-${r._id}`);
+            const unlockContainer = document.getElementById(`unlock-status-${r._id}`);
+            
+            if (scoreEl) scoreEl.innerText = r.votes;
+            
+            if (unlockContainer) {
+                const progress = Math.min(100, (r.interactionCount / r.unlockThreshold) * 100);
+                
+                if (r.isUnlocked) {
+                    // If unlocked, check if we need to swap the UI from lock -> button
+                    if (!unlockContainer.querySelector('button')) {
+                         unlockContainer.innerHTML = `
+                            <button onclick="fetchComments('${r._id}')" class="text-xs font-bold text-white flex items-center gap-2 bg-red-600 px-3 py-1.5 rounded hover:bg-red-700 transition-colors fade-in">
+                                <i class="fa-solid fa-comment"></i> Discuss
+                            </button>`;
+                    }
+                } else {
+                    // Still locked, just update text/heat
+                    unlockContainer.innerHTML = `
+                        <div class="flex items-center gap-2 text-xs text-gray-500" id="heat-container-${r._id}">
+                            <i class="fa-solid fa-lock"></i>
+                            <span>${Math.round(progress)}% Heat</span>
+                        </div>`;
+                }
+            }
         }
 
         async function fetchComments(reviewId) {
@@ -228,7 +294,7 @@
             const list = document.getElementById(`comment-list-${reviewId}`);
             
             if (!container.classList.contains('hidden')) {
-                container.classList.add('hidden'); // Toggle off
+                container.classList.add('hidden'); 
                 return;
             }
             
@@ -265,7 +331,6 @@
 
                 if (res.ok) {
                     input.value = '';
-                    // Close and reopen to refresh
                     document.getElementById(`comments-${reviewId}`).classList.add('hidden');
                     fetchComments(reviewId);
                 }
@@ -295,12 +360,9 @@
             filtered.forEach(r => {
                 const date = new Date(r.createdAt).toLocaleDateString();
                 const ratingColor = r.rating >= 8 ? 'text-green-400' : r.rating >= 5 ? 'text-yellow-400' : 'text-red-500';
-                
-                // Progress to Unlock
                 const progress = Math.min(100, (r.interactionCount / r.unlockThreshold) * 100);
                 
                 const card = document.createElement('div');
-                // Use safe ID
                 card.id = `review-${r._id}`; 
                 card.className = 'glass-panel rounded-xl p-6 fade-in hover:border-gray-600 transition-all duration-300 relative group';
                 
@@ -326,30 +388,32 @@
                             <button onclick="vote('${r._id}', 'up')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-700 hover:bg-green-500/20 text-gray-400 hover:text-green-400 transition-all">
                                 <i class="fa-solid fa-arrow-up"></i>
                             </button>
-                            <span class="font-bold text-white min-w-[20px] text-center">${r.votes}</span>
+                            <span id="score-${r._id}" class="font-bold text-white min-w-[20px] text-center">${r.votes}</span>
                             <button onclick="vote('${r._id}', 'down')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-700 hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all">
                                 <i class="fa-solid fa-arrow-down"></i>
                             </button>
                         </div>
 
-                        <!-- Unlock Status -->
+                        <!-- Unlock Status Container (Targeted for seamless updates) -->
                         <div class="flex items-center gap-3">
-                            ${r.isUnlocked 
-                                ? `<button onclick="fetchComments('${r._id}')" class="text-xs font-bold text-white flex items-center gap-2 bg-red-600 px-3 py-1.5 rounded hover:bg-red-700 transition-colors">
-                                     <i class="fa-solid fa-comment"></i> Discuss
-                                   </button>`
-                                : `<div class="flex items-center gap-2 text-xs text-gray-500" title="${r.unlockThreshold - r.interactionCount} more interactions needed">
-                                     <i class="fa-solid fa-lock"></i>
-                                     <span>${Math.round(progress)}% Heat</span>
-                                   </div>`
-                            }
+                            <div id="unlock-status-${r._id}">
+                                ${r.isUnlocked 
+                                    ? `<button onclick="fetchComments('${r._id}')" class="text-xs font-bold text-white flex items-center gap-2 bg-red-600 px-3 py-1.5 rounded hover:bg-red-700 transition-colors">
+                                         <i class="fa-solid fa-comment"></i> Discuss
+                                       </button>`
+                                    : `<div class="flex items-center gap-2 text-xs text-gray-500" id="heat-container-${r._id}" title="${r.unlockThreshold - r.interactionCount} more interactions needed">
+                                         <i class="fa-solid fa-lock"></i>
+                                         <span>${Math.round(progress)}% Heat</span>
+                                       </div>`
+                                }
+                            </div>
                             <button onclick="shareReview('${r._id}')" class="text-gray-500 hover:text-white transition-colors">
                                 <i class="fa-solid fa-share-nodes"></i>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Comments Section (Hidden by default) -->
+                    <!-- Comments Section -->
                     <div id="comments-${r._id}" class="hidden mt-4 pt-4 border-t border-gray-800 fade-in">
                         <div id="comment-list-${r._id}" class="space-y-2 mb-4 max-h-48 overflow-y-auto pr-2 custom-scrollbar"></div>
                         <div class="flex gap-2">
@@ -366,13 +430,11 @@
 
         // --- Utilities ---
         function scrollToReview(id) {
-            // Small delay to ensure DOM paint
             setTimeout(() => {
                 const element = document.getElementById(`review-${id}`);
                 if (element) {
                     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     element.classList.add('highlight-review');
-                    // Optional: Clear URL
                     window.history.replaceState({}, document.title, "/");
                 }
             }, 100);
@@ -380,14 +442,11 @@
 
         window.shareReview = function(id) {
             const url = `${window.location.origin}/?id=${id}`;
-            
-            // Robust Clipboard Copy
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(url)
                     .then(() => showToast("Link copied!", "link"))
                     .catch(() => showToast("Error copying link", "exclamation-circle"));
             } else {
-                // Fallback for older browsers / non-https
                 alert(`Copy this link: ${url}`);
             }
         }
