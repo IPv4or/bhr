@@ -3,7 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- 1. SOCIAL META TAGS (Update content with your real domain later) -->
     <title>Brutally Honest Reviews - Logan, UT</title>
+    <meta name="description" content="Real reviews from real locals. No filter.">
+    <meta property="og:title" content="Brutally Honest Reviews">
+    <meta property="og:description" content="See what locals really think about Logan, Utah.">
+    <meta property="og:image" content="https://brutally-honest-reviews.up.railway.app/preview.png"> <!-- Add a screenshot to your public folder later -->
+    <meta property="og:url" content="https://brutally-honest-reviews.up.railway.app/">
+    <meta name="twitter:card" content="summary_large_image">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -11,8 +20,8 @@
         
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #111827; /* gray-900 */
-            color: #f3f4f6; /* gray-100 */
+            background-color: #111827;
+            color: #f3f4f6;
         }
 
         /* Custom Scrollbar */
@@ -30,6 +39,17 @@
 
         .neon-accent { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        
+        /* New Glow Animation for Deep Linked Reviews */
+        @keyframes pulse-red {
+            0%, 100% { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+            50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 30px rgba(239, 68, 68, 0.5); }
+        }
+        .highlight-review {
+            animation: pulse-red 2s infinite;
+            border: 2px solid rgb(239, 68, 68) !important;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -42,7 +62,7 @@
     <nav class="glass-panel sticky top-0 z-50 border-b border-gray-800">
         <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
-                <div class="flex items-center gap-3">
+                <a href="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
                     <div class="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center neon-accent">
                         <i class="fa-solid fa-gavel text-white text-lg"></i>
                     </div>
@@ -50,7 +70,7 @@
                         <h1 class="font-bold text-xl tracking-tight text-white">Brutally Honest Reviews</h1>
                         <p class="text-xs text-gray-400 tracking-wider uppercase">Logan, Utah</p>
                     </div>
-                </div>
+                </a>
                 <div class="flex items-center gap-4">
                     <button onclick="openModal()" class="bg-white text-black hover:bg-gray-200 px-4 py-2 rounded-full font-bold text-sm transition-all transform hover:scale-105 shadow-lg flex items-center gap-2">
                         <i class="fa-solid fa-pen"></i>
@@ -134,6 +154,12 @@
         </div>
     </div>
 
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-800 border border-green-500/50 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 transition-all duration-300 translate-y-20 opacity-0 z-[70]">
+        <i class="fa-solid fa-link text-green-500"></i>
+        <span class="font-medium text-sm" id="toastMsg">Link copied to clipboard</span>
+    </div>
+
     <script>
         // --- State & Refs ---
         const feed = document.getElementById('reviewFeed');
@@ -143,6 +169,8 @@
         const ratingInput = document.getElementById('inputRating');
         const ratingDisplay = document.getElementById('ratingDisplay');
         const filterBtns = document.querySelectorAll('.filter-btn');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
         
         let reviews = [];
         let currentFilter = 'all';
@@ -154,6 +182,24 @@
                 const res = await fetch('/api/reviews');
                 reviews = await res.json();
                 renderReviews();
+                
+                // 2. DEEP LINK CHECKER
+                // Check if URL has ?id=... and scroll to it
+                const urlParams = new URLSearchParams(window.location.search);
+                const linkedId = urlParams.get('id');
+                
+                if (linkedId) {
+                    setTimeout(() => {
+                        const element = document.getElementById(`review-${linkedId}`);
+                        if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            element.classList.add('highlight-review');
+                            // Clean URL without reload
+                            window.history.replaceState({}, document.title, "/");
+                        }
+                    }, 500); // Wait for render
+                }
+
             } catch (err) {
                 console.error(err);
                 feed.innerHTML = `<p class="text-center text-red-500">Failed to load reviews.</p>`;
@@ -170,10 +216,11 @@
                 
                 if (res.ok) {
                     const newReview = await res.json();
-                    reviews.unshift(newReview); // Add to local list
+                    reviews.unshift(newReview);
                     renderReviews();
                     closeModal();
                     form.reset();
+                    showToast("Review Posted!", "check-circle");
                 } else {
                     alert("Failed to post. Be brutally honest, but not illegal.");
                 }
@@ -204,8 +251,11 @@
 
             filtered.forEach(review => {
                 const date = new Date(review.createdAt).toLocaleDateString();
+                // 3. ADD ID TO DOM ELEMENT
                 const card = document.createElement('div');
-                card.className = 'glass-panel rounded-xl p-6 fade-in hover:border-gray-600 transition-colors relative group';
+                card.id = `review-${review._id}`; 
+                card.className = 'glass-panel rounded-xl p-6 fade-in hover:border-gray-600 transition-all duration-300 relative group';
+                
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-3">
                         <div>
@@ -227,9 +277,35 @@
                                 <i class="fa-solid fa-arrow-up"></i> <span class="text-sm font-medium">${review.votes || 0}</span>
                             </button>
                         </div>
+                        <!-- 4. SHARE BUTTON -->
+                        <button onclick="shareReview('${review._id}')" class="text-gray-500 hover:text-white text-sm flex items-center gap-2 transition-colors px-3 py-1 rounded hover:bg-gray-800">
+                            <i class="fa-solid fa-share-nodes"></i> Share
+                        </button>
                     </div>`;
                 feed.appendChild(card);
             });
+        }
+
+        // --- 5. Share Functionality ---
+        window.shareReview = function(id) {
+            const url = `${window.location.origin}/?id=${id}`;
+            navigator.clipboard.writeText(url).then(() => {
+                showToast("Link copied to clipboard!", "link");
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        function showToast(message, icon) {
+            toastMsg.innerText = message;
+            // Update icon if needed, default is link
+            const iconEl = toast.querySelector('i');
+            iconEl.className = `fa-solid fa-${icon || 'link'} text-green-500`;
+            
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
         }
 
         // --- Event Listeners ---
