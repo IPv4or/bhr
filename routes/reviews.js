@@ -1,10 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Review = require('../models/Review');
-
-// Simple Admin Protection (Hardcoded for simplicity - use proper Auth in v2)
-// You must send a header 'x-admin-secret': 'logan-justice' to delete
-const ADMIN_SECRET = 'logan-justice';
+const { protect } = require('../middleware/authMiddleware');
 
 // @desc    Get all reviews
 // @route   GET /api/reviews
@@ -36,31 +33,23 @@ router.post('/', async (req, res) => {
 // @route   PATCH /api/reviews/:id/vote
 router.patch('/:id/vote', async (req, res) => {
     try {
-        const { type } = req.body; // 'up' or 'down'
+        const { type } = req.body;
         const increment = type === 'up' ? 1 : -1;
-        
         const review = await Review.findByIdAndUpdate(
             req.params.id,
             { $inc: { votes: increment } },
             { new: true }
         );
-        
         res.status(200).json(review);
     } catch (err) {
         res.status(500).json({ error: 'Server Error' });
     }
 });
 
-// @desc    Delete a review (Admin only)
+// @desc    Delete a review (Protected)
 // @route   DELETE /api/reviews/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', protect, async (req, res) => {
     try {
-        const secret = req.headers['x-admin-secret'];
-        
-        if (secret !== ADMIN_SECRET) {
-            return res.status(401).json({ error: 'Unauthorized: Wrong secret phrase' });
-        }
-
         const review = await Review.findById(req.params.id);
 
         if (!review) {
@@ -68,8 +57,7 @@ router.delete('/:id', async (req, res) => {
         }
 
         await review.deleteOne();
-
-        res.status(200).json({ success: true, data: {} });
+        res.status(200).json({ success: true, id: req.params.id });
     } catch (err) {
         res.status(500).json({ error: 'Server Error' });
     }
