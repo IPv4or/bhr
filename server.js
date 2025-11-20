@@ -16,38 +16,38 @@ dotenv.config();
 
 const app = express();
 
+// --- CRITICAL FIX FOR RAILWAY ---
+// This tells Express to trust the Load Balancer/Proxy 
+// so we can get the correct User IP for rate limiting.
+app.set('trust proxy', 1); 
+// --------------------------------
+
 // --- SECURITY MIDDLEWARE START ---
 
-// 1. Set security headers (Helps prevent sniffing, clickjacking, etc.)
+// 1. Set security headers
 app.use(helmet());
 
-// 2. Rate Limiting (Limit requests from same IP)
-// 100 requests per 10 minutes per IP
+// 2. Rate Limiting
 const limiter = rateLimit({
-    windowMs: 10 * 60 * 1000, 
-    max: 100,
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 100, 
     message: 'Too many requests from this IP, please try again later.'
 });
 app.use(limiter);
 
-// 3. Prevent NoSQL Injection (Sanitizes '$' and '.' in inputs)
+// 3. Prevent NoSQL Injection
 app.use(mongoSanitize());
 
-// 4. Prevent XSS Attacks (Sanitizes HTML inputs)
+// 4. Prevent XSS Attacks
 app.use(xss());
 
-// 5. Prevent Parameter Pollution (Prevents duplicate query params)
+// 5. Prevent Parameter Pollution
 app.use(hpp());
 
 // --- SECURITY MIDDLEWARE END ---
 
-// Body Parser (Limit body size to prevents DoS attacks via massive payloads)
 app.use(express.json({ limit: '10kb' }));
-
-// CORS
 app.use(cors());
-
-// Static Files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // DB Connection
@@ -65,7 +65,7 @@ const connectDB = async () => {
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/admin', require('./routes/admin'));
 
-// Catch-all for SPA
+// Catch-all
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
