@@ -4,13 +4,40 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 
+// Security Imports
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+
 // Load env vars
 dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(express.json());
+// --- SECURITY MIDDLEWARE START ---
+
+// 1. Set security headers
+app.use(helmet());
+
+// 2. Rate Limiting (Limit requests from same IP)
+const limiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.'
+});
+app.use(limiter);
+
+// 3. Prevent NoSQL Injection
+app.use(mongoSanitize());
+
+// 4. Prevent XSS Attacks
+app.use(xss());
+
+// --- SECURITY MIDDLEWARE END ---
+
+// Standard Middleware
+app.use(express.json({ limit: '10kb' })); // Limit body size to 10kb
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -27,7 +54,7 @@ const connectDB = async () => {
 
 // Routes
 app.use('/api/reviews', require('./routes/reviews'));
-app.use('/api/admin', require('./routes/admin')); // New Admin Route
+app.use('/api/admin', require('./routes/admin'));
 
 // Catch-all
 app.get('*', (req, res) => {
