@@ -4,15 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- 1. SOCIAL META TAGS (Update content with your real domain later) -->
+    <!-- Social Meta Tags -->
     <title>Brutally Honest Reviews - Logan, UT</title>
     <meta name="description" content="Real reviews from real locals. No filter.">
     <meta property="og:title" content="Brutally Honest Reviews">
     <meta property="og:description" content="See what locals really think about Logan, Utah.">
-    <meta property="og:image" content="https://brutally-honest-reviews.up.railway.app/preview.png"> <!-- Add a screenshot to your public folder later -->
-    <meta property="og:url" content="https://brutally-honest-reviews.up.railway.app/">
-    <meta name="twitter:card" content="summary_large_image">
-
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -40,7 +37,7 @@
         .neon-accent { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         
-        /* New Glow Animation for Deep Linked Reviews */
+        /* Glow Animation for Linked Review */
         @keyframes pulse-red {
             0%, 100% { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
             50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 30px rgba(239, 68, 68, 0.5); }
@@ -181,28 +178,21 @@
             try {
                 const res = await fetch('/api/reviews');
                 reviews = await res.json();
+                
+                if (!Array.isArray(reviews)) throw new Error("Invalid data");
+
                 renderReviews();
                 
-                // 2. DEEP LINK CHECKER
-                // Check if URL has ?id=... and scroll to it
+                // Deep Link Logic (Safe Version)
                 const urlParams = new URLSearchParams(window.location.search);
                 const linkedId = urlParams.get('id');
-                
                 if (linkedId) {
-                    setTimeout(() => {
-                        const element = document.getElementById(`review-${linkedId}`);
-                        if (element) {
-                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            element.classList.add('highlight-review');
-                            // Clean URL without reload
-                            window.history.replaceState({}, document.title, "/");
-                        }
-                    }, 500); // Wait for render
+                    scrollToReview(linkedId);
                 }
 
             } catch (err) {
                 console.error(err);
-                feed.innerHTML = `<p class="text-center text-red-500">Failed to load reviews.</p>`;
+                feed.innerHTML = `<div class="text-center py-12"><p class="text-red-500">Failed to load reviews. Server might be napping.</p></div>`;
             }
         }
 
@@ -222,7 +212,8 @@
                     form.reset();
                     showToast("Review Posted!", "check-circle");
                 } else {
-                    alert("Failed to post. Be brutally honest, but not illegal.");
+                    const data = await res.json();
+                    alert(data.error || "Failed to post.");
                 }
             } catch (err) {
                 console.error(err);
@@ -251,8 +242,8 @@
 
             filtered.forEach(review => {
                 const date = new Date(review.createdAt).toLocaleDateString();
-                // 3. ADD ID TO DOM ELEMENT
                 const card = document.createElement('div');
+                // Use safe ID
                 card.id = `review-${review._id}`; 
                 card.className = 'glass-panel rounded-xl p-6 fade-in hover:border-gray-600 transition-all duration-300 relative group';
                 
@@ -277,7 +268,6 @@
                                 <i class="fa-solid fa-arrow-up"></i> <span class="text-sm font-medium">${review.votes || 0}</span>
                             </button>
                         </div>
-                        <!-- 4. SHARE BUTTON -->
                         <button onclick="shareReview('${review._id}')" class="text-gray-500 hover:text-white text-sm flex items-center gap-2 transition-colors px-3 py-1 rounded hover:bg-gray-800">
                             <i class="fa-solid fa-share-nodes"></i> Share
                         </button>
@@ -286,21 +276,38 @@
             });
         }
 
-        // --- 5. Share Functionality ---
-        window.shareReview = function(id) {
-            const url = `${window.location.origin}/?id=${id}`;
-            navigator.clipboard.writeText(url).then(() => {
-                showToast("Link copied to clipboard!", "link");
-            }).catch(err => {
-                console.error('Failed to copy: ', err);
-            });
+        // --- Utilities ---
+        function scrollToReview(id) {
+            // Small delay to ensure DOM paint
+            setTimeout(() => {
+                const element = document.getElementById(`review-${id}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.classList.add('highlight-review');
+                    // Optional: Clear URL
+                    window.history.replaceState({}, document.title, "/");
+                }
+            }, 100);
         }
 
-        function showToast(message, icon) {
-            toastMsg.innerText = message;
-            // Update icon if needed, default is link
+        window.shareReview = function(id) {
+            const url = `${window.location.origin}/?id=${id}`;
+            
+            // Robust Clipboard Copy
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(url)
+                    .then(() => showToast("Link copied!", "link"))
+                    .catch(() => showToast("Error copying link", "exclamation-circle"));
+            } else {
+                // Fallback for older browsers / non-https
+                alert(`Copy this link: ${url}`);
+            }
+        }
+
+        function showToast(message, iconName) {
+            if(toastMsg) toastMsg.innerText = message;
             const iconEl = toast.querySelector('i');
-            iconEl.className = `fa-solid fa-${icon || 'link'} text-green-500`;
+            if(iconEl && iconName) iconEl.className = `fa-solid fa-${iconName} text-green-500`;
             
             toast.classList.remove('translate-y-20', 'opacity-0');
             setTimeout(() => {
@@ -332,6 +339,7 @@
             postReview(reviewData);
         });
 
+        // Modal Functions
         window.openModal = () => {
             modal.classList.remove('hidden');
             setTimeout(() => { modal.classList.remove('opacity-0'); modalContent.classList.remove('scale-95'); modalContent.classList.add('scale-100'); }, 10);
