@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
+const hpp = require('hpp');
 
 // Load env vars
 dotenv.config();
@@ -17,28 +18,36 @@ const app = express();
 
 // --- SECURITY MIDDLEWARE START ---
 
-// 1. Set security headers
+// 1. Set security headers (Helps prevent sniffing, clickjacking, etc.)
 app.use(helmet());
 
 // 2. Rate Limiting (Limit requests from same IP)
+// 100 requests per 10 minutes per IP
 const limiter = rateLimit({
-    windowMs: 10 * 60 * 1000, // 10 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: 10 * 60 * 1000, 
+    max: 100,
     message: 'Too many requests from this IP, please try again later.'
 });
 app.use(limiter);
 
-// 3. Prevent NoSQL Injection
+// 3. Prevent NoSQL Injection (Sanitizes '$' and '.' in inputs)
 app.use(mongoSanitize());
 
-// 4. Prevent XSS Attacks
+// 4. Prevent XSS Attacks (Sanitizes HTML inputs)
 app.use(xss());
+
+// 5. Prevent Parameter Pollution (Prevents duplicate query params)
+app.use(hpp());
 
 // --- SECURITY MIDDLEWARE END ---
 
-// Standard Middleware
-app.use(express.json({ limit: '10kb' })); // Limit body size to 10kb
+// Body Parser (Limit body size to prevents DoS attacks via massive payloads)
+app.use(express.json({ limit: '10kb' }));
+
+// CORS
 app.use(cors());
+
+// Static Files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // DB Connection
@@ -56,7 +65,7 @@ const connectDB = async () => {
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/admin', require('./routes/admin'));
 
-// Catch-all
+// Catch-all for SPA
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
