@@ -12,27 +12,34 @@
     <div class="max-w-4xl mx-auto">
         <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-bold text-red-500">
-                <i class="fa-solid fa-shield-halved mr-2"></i>Moderation Console
+                <i class="fa-solid fa-lock mr-2"></i>Secure Admin
             </h1>
             <a href="/" class="text-gray-400 hover:text-white underline">Back to App</a>
         </div>
 
-        <!-- Secret Key Input -->
-        <div id="loginSection" class="mb-8 p-6 bg-gray-800 rounded-lg border border-gray-700">
-            <label class="block text-sm font-bold mb-2 text-gray-400">Admin Secret Phrase</label>
-            <div class="flex gap-2">
-                <input type="password" id="secretInput" placeholder="Enter the secret phrase..." 
-                    class="flex-1 bg-gray-900 border border-gray-600 rounded px-4 py-2 focus:border-red-500 focus:outline-none">
-                <button onclick="loadReviews()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded transition-colors">
-                    Access
+        <!-- Login Section -->
+        <div id="loginSection" class="max-w-md mx-auto mt-20 p-8 bg-gray-800 rounded-xl border border-gray-700 shadow-2xl">
+            <h2 class="text-xl font-bold mb-6 text-center">Authenticate</h2>
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold mb-1 text-gray-400 uppercase">Admin Password</label>
+                    <input type="password" id="passwordInput" placeholder="••••••••" 
+                        class="w-full bg-gray-900 border border-gray-600 rounded px-4 py-3 focus:border-red-500 focus:outline-none transition-colors">
+                </div>
+                <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded transition-colors">
+                    Login
                 </button>
-            </div>
-            <p class="text-xs text-gray-500 mt-2">Default for this version is: <span class="font-mono text-gray-300">logan-justice</span></p>
+            </form>
+            <p id="loginError" class="text-red-500 text-center text-sm mt-4 hidden"></p>
         </div>
 
         <!-- Dashboard -->
-        <div id="dashboard" class="hidden">
-            <div class="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
+        <div id="dashboard" class="hidden fade-in">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Live Feed</h2>
+                <button onclick="logout()" class="text-xs text-gray-400 hover:text-white uppercase font-bold">Logout</button>
+            </div>
+            <div class="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 shadow-xl">
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr class="bg-gray-900 text-gray-400 text-sm uppercase">
@@ -42,9 +49,7 @@
                             <th class="p-4 border-b border-gray-700 w-24">Action</th>
                         </tr>
                     </thead>
-                    <tbody id="reviewsTable" class="divide-y divide-gray-700">
-                        <!-- Reviews injected here -->
-                    </tbody>
+                    <tbody id="reviewsTable" class="divide-y divide-gray-700"></tbody>
                 </table>
             </div>
         </div>
@@ -52,19 +57,61 @@
 
     <script>
         const API_URL = '/api/reviews';
-        let secret = '';
+        const AUTH_URL = '/api/admin/login';
+        const loginSection = document.getElementById('loginSection');
+        const dashboard = document.getElementById('dashboard');
+        const loginForm = document.getElementById('loginForm');
+        const loginError = document.getElementById('loginError');
+
+        // Check for existing session on load
+        const token = localStorage.getItem('adminToken');
+        if (token) {
+            showDashboard();
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('passwordInput').value;
+
+            try {
+                const res = await fetch(AUTH_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    localStorage.setItem('adminToken', data.token);
+                    showDashboard();
+                    loginForm.reset();
+                    loginError.classList.add('hidden');
+                } else {
+                    throw new Error(data.error || 'Login failed');
+                }
+            } catch (err) {
+                loginError.innerText = err.message;
+                loginError.classList.remove('hidden');
+            }
+        });
+
+        function showDashboard() {
+            loginSection.classList.add('hidden');
+            dashboard.classList.remove('hidden');
+            loadReviews();
+        }
+
+        function logout() {
+            localStorage.removeItem('adminToken');
+            location.reload();
+        }
 
         async function loadReviews() {
-            secret = document.getElementById('secretInput').value;
-            if(!secret) return alert("Enter the secret!");
-
             try {
                 const res = await fetch(API_URL);
                 const reviews = await res.json();
-                
                 renderTable(reviews);
-                document.getElementById('loginSection').classList.add('hidden');
-                document.getElementById('dashboard').classList.remove('hidden');
             } catch (err) {
                 alert("Failed to load reviews.");
             }
@@ -97,22 +144,24 @@
         }
 
         async function deleteReview(id) {
-            if(!confirm("Are you sure? This cannot be undone.")) return;
+            if(!confirm("Permanently delete this review?")) return;
+
+            const token = localStorage.getItem('adminToken');
 
             try {
                 const res = await fetch(`${API_URL}/${id}`, {
                     method: 'DELETE',
                     headers: {
-                        'x-admin-secret': secret
+                        'Authorization': `Bearer ${token}` // The Badge!
                     }
                 });
 
-                const data = await res.json();
-
                 if (res.ok) {
-                    loadReviews(); // Refresh table
+                    loadReviews();
                 } else {
-                    alert(data.error || "Failed to delete");
+                    const data = await res.json();
+                    alert(data.error || "Failed to delete. Token might be expired.");
+                    if(res.status === 401) logout();
                 }
             } catch (err) {
                 alert("Server Error");
